@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Moje místa</title>
+<title>Moje místa – záloha z mapy.com</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -12,29 +12,33 @@
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
 body{font:15px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:340px 1fr}
-aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;overflow:auto}
 .box{padding:14px 16px;border-bottom:1px solid var(--line)}
 h1{font-size:18px;margin:0 0 2px}
+h2{font-size:14px;margin:0 0 6px}
 .sub{color:var(--mute);font-size:13px;margin:0}
 label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
 input[type=text],input[type=password],input[type=search],select{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
 input[type=range]{width:100%;accent-color:var(--accent)}
 button,.btn{display:inline-block;padding:8px 12px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+button.alt{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.btns{display:flex;gap:6px;margin-top:8px}.btns button{flex:1}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .drop{border:2px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--mute);margin-top:10px}
 .drop.over{border-color:var(--accent)}
 .row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
 .row b{font-size:15px}
-#list{list-style:none;margin:0;padding:0;overflow:auto;flex:1}
+.hint{color:var(--mute);font-size:12px;margin:6px 0 0}
+#list{list-style:none;margin:0;padding:0;flex:1;min-height:160px}
 #list li{padding:9px 16px;border-bottom:1px solid var(--line);cursor:pointer}
 #list li:hover{background:var(--bg)}
 #list small{display:block;color:var(--mute)}
-#more{padding:10px 16px;color:var(--mute);font-size:13px}
 main{position:relative;min-height:0}
 #map{position:absolute;inset:0}
 .mapy-logo{position:absolute;left:8px;bottom:8px;z-index:1000}
 .mapy-logo img{display:block;height:20px}
-#msg{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;display:none}
+#msg{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;display:none;max-width:90%}
+.del{color:#b91c1c}
 @media(max-width:760px){body{grid-template-columns:1fr;grid-template-rows:46vh 1fr}aside{order:2;border-right:0;border-top:1px solid var(--line)}main{order:1}}
 </style>
 </head>
@@ -45,6 +49,7 @@ main{position:relative;min-height:0}
     <p class="sub">Záloha uložených míst z mapy.com</p>
     <label for="key">API klíč (developer.mapy.com)</label>
     <input id="key" type="password" autocomplete="off" placeholder="vlož klíč">
+    <p class="hint" id="keyinfo">Klíč se uloží v tomto prohlížeči.</p>
     <label for="set">Typ mapy</label>
     <select id="set">
       <option value="basic">Základní</option>
@@ -58,6 +63,15 @@ main{position:relative;min-height:0}
     </div>
   </div>
   <div class="box">
+    <h2>Přidat místo</h2>
+    <label for="nname" style="margin-top:0">Název</label>
+    <input id="nname" type="text" placeholder="např. Hrad Kokořín">
+    <label for="ncoord">GPS souřadnice</label>
+    <input id="ncoord" type="text" placeholder="50.0755, 14.4378">
+    <div class="btns"><button id="add">Vložit</button></div>
+    <p class="hint">Místo můžeš přidat i pravým klikem do mapy (na mobilu dlouhým podržením).</p>
+  </div>
+  <div class="box">
     <div class="row"><span>Míst na mapě</span><b><span id="shown">0</span> / <span id="total">0</span></b></div>
     <input id="limit" type="range" min="0" max="0" value="0" aria-label="Počet vykreslených míst">
     <label for="order">Které místa vykreslit</label>
@@ -68,6 +82,15 @@ main{position:relative;min-height:0}
     </select>
     <label for="q">Hledat v seznamu</label>
     <input id="q" type="search" placeholder="název nebo popis">
+  </div>
+  <div class="box">
+    <h2>Export všech míst</h2>
+    <div class="btns">
+      <button class="alt" id="xgpx">GPX</button>
+      <button class="alt" id="xcsv">CSV</button>
+      <button class="alt" id="xjson">GeoJSON</button>
+    </div>
+    <p class="hint" id="saveinfo">Zatím nic neuloženo.</p>
   </div>
   <ul id="list"></ul>
 </aside>
@@ -80,25 +103,32 @@ main{position:relative;min-height:0}
 <script>
 (function(){
   var $=function(id){return document.getElementById(id)};
-  var places=[], tiles=null, shownIds=new Set();
-  var map=L.map('map',{preferCanvas:true,zoomControl:true}).setView([49.8,15.5],7);
+  var places=[], tiles=null;
+  var map=L.map('map',{preferCanvas:true}).setView([49.8,15.5],7);
   var canvas=L.canvas({padding:0.5});
   var layer=L.layerGroup().addTo(map);
-  map.attribution && map.attributionControl.addAttribution('&copy; Seznam.cz a.s. a další');
+  map.attributionControl.addAttribution('&copy; Seznam.cz a.s. a další');
 
-  function store(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function store(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}
   function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
   function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
-  function msg(t){var m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display='none'},3500)}
+  function msg(t){var m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display='none'},4000)}
+  function fmtDate(t){return t?new Date(t).toLocaleDateString('cs-CZ'):''}
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
 
+  /* ---------- API klíč a dlaždice ---------- */
   function setTiles(){
     var key=$('key').value.trim();
     if(tiles){map.removeLayer(tiles);tiles=null}
     if(!key){msg('Vlož API klíč, jinak se mapa nenačte.');return}
-    tiles=L.tileLayer('https://api.mapy.cz/v1/maptiles/'+$('set').value+'/256/{z}/{x}/{y}?apikey='+encodeURIComponent(key),{minZoom:0,maxZoom:19,attribution:''});
+    tiles=L.tileLayer('https://api.mapy.cz/v1/maptiles/'+$('set').value+'/256/{z}/{x}/{y}?apikey='+encodeURIComponent(key),{minZoom:0,maxZoom:19});
     tiles.addTo(map);tiles.bringToBack();
-    store('mapy_key',key);store('mapy_set',$('set').value);
+    var ok=store('mapy_key',key)&&store('mapy_set',$('set').value);
+    $('keyinfo').textContent=ok?'Klíč je uložen v tomto prohlížeči.':'Klíč se nepodařilo uložit (prohlížeč ukládání blokuje).';
   }
+
+  /* ---------- Data ---------- */
+  function nextId(){return places.reduce(function(m,p){return Math.max(m,p.id)},0)+1}
 
   function parseGPX(text){
     var doc=new DOMParser().parseFromString(text,'application/xml');
@@ -108,12 +138,27 @@ main{position:relative;min-height:0}
       var n=w[i],lat=parseFloat(n.getAttribute('lat')),lon=parseFloat(n.getAttribute('lon'));
       if(isNaN(lat)||isNaN(lon))continue;
       var g=function(t){var e=n.getElementsByTagName(t)[0];return e?e.textContent.trim():''};
-      var time=g('time');
-      out.push({id:i,lat:lat,lon:lon,name:g('name')||'(bez názvu)',desc:g('desc')||g('cmt'),time:time,ts:time?Date.parse(time)||0:0});
+      out.push(mk(i+1,lat,lon,g('name')||'(bez názvu)',g('desc')||g('cmt'),g('time')));
     }
     return out;
   }
+  function mk(id,lat,lon,name,desc,time){return {id:id,lat:lat,lon:lon,name:name,desc:desc||'',time:time||'',ts:time?Date.parse(time)||0:0}}
 
+  function save(){
+    var data=JSON.stringify(places.map(function(p){return [p.id,p.lat,p.lon,p.name,p.desc,p.time]}));
+    var ok=store('mapy_places',data);
+    $('saveinfo').textContent=ok?('Uloženo v prohlížeči: '+places.length+' míst.'):'POZOR: místa se nepodařilo uložit do prohlížeče. Exportuj je ručně.';
+    if(!ok)msg('Ukládání do prohlížeče selhalo. Udělej export.');
+  }
+  function loadSaved(){
+    var raw=load('mapy_places');
+    if(raw){try{return JSON.parse(raw).map(function(a){return mk(a[0],a[1],a[2],a[3],a[4],a[5])})}catch(e){}}
+    var old=load('mapy_gpx'); // starší verze aplikace
+    if(old){try{return parseGPX(old)}catch(e){}}
+    return [];
+  }
+
+  /* ---------- Vykreslení ---------- */
   function pick(n){
     var o=$('order').value,arr=places.slice();
     if(o==='new')return arr.sort(function(a,b){return b.ts-a.ts||b.id-a.id}).slice(0,n);
@@ -123,45 +168,52 @@ main{position:relative;min-height:0}
     for(var i=0;i<n;i++)res.push(arr[Math.floor(i*step)]);
     return res;
   }
-
-  function popupHtml(p){
-    var d=p.time?new Date(p.time).toLocaleDateString('cs-CZ'):'';
-    return '<b>'+esc(p.name)+'</b>'+(d?'<br>'+esc(d):'')+(p.desc?'<br>'+esc(p.desc):'')+'<br><small>'+p.lat.toFixed(5)+', '+p.lon.toFixed(5)+'</small>';
+  function popupEl(p){
+    var d=document.createElement('div');
+    d.innerHTML='<b>'+esc(p.name)+'</b>'+(p.time?'<br>'+esc(fmtDate(p.time)):'')+(p.desc?'<br>'+esc(p.desc):'')+'<br><small>'+p.lat.toFixed(5)+', '+p.lon.toFixed(5)+'</small><br><a href="#" class="del">Smazat místo</a>';
+    d.querySelector('.del').onclick=function(e){
+      e.preventDefault();
+      if(confirm('Smazat místo „'+p.name+'“?')){places=places.filter(function(x){return x!==p});map.closePopup();refresh()}
+    };
+    return d;
   }
-
   function draw(){
     layer.clearLayers();
     var n=parseInt($('limit').value,10)||0,sel=pick(n);
     var css=getComputedStyle(document.documentElement).getPropertyValue('--dot').trim()||'#c2410c';
     sel.forEach(function(p){
       L.circleMarker([p.lat,p.lon],{renderer:canvas,radius:5,color:'#fff',weight:1,fillColor:css,fillOpacity:.9})
-        .bindPopup(function(){return popupHtml(p)}).addTo(layer);
+        .bindPopup(function(){return popupEl(p)}).addTo(layer);
     });
     $('shown').textContent=sel.length;
   }
-
   function renderList(){
     var q=$('q').value.trim().toLowerCase(),ul=$('list');ul.innerHTML='';
     var rows=places.filter(function(p){return !q||(p.name+' '+p.desc).toLowerCase().indexOf(q)>-1});
     rows.sort(function(a,b){return b.ts-a.ts||b.id-a.id});
     rows.slice(0,200).forEach(function(p){
       var li=document.createElement('li');
-      li.innerHTML=esc(p.name)+'<small>'+(p.time?new Date(p.time).toLocaleDateString('cs-CZ'):'')+(p.desc?' '+esc(p.desc.slice(0,60)):'')+'</small>';
-      li.onclick=function(){map.flyTo([p.lat,p.lon],Math.max(map.getZoom(),14));L.popup().setLatLng([p.lat,p.lon]).setContent(popupHtml(p)).openOn(map)};
+      li.innerHTML=esc(p.name)+'<small>'+esc(fmtDate(p.time))+(p.desc?' '+esc(p.desc.slice(0,60)):'')+'</small>';
+      li.onclick=function(){map.flyTo([p.lat,p.lon],Math.max(map.getZoom(),14));L.popup().setLatLng([p.lat,p.lon]).setContent(popupEl(p)).openOn(map)};
       ul.appendChild(li);
     });
-    if(rows.length>200){var m=document.createElement('li');m.id='more';m.textContent='Zobrazeno 200 z '+rows.length+'. Zpřesni hledání.';m.style.cursor='default';ul.appendChild(m)}
-    if(!rows.length){var e=document.createElement('li');e.textContent=places.length?'Nic nenalezeno.':'Zatím žádná místa. Nahraj .gpx soubor.';e.style.cursor='default';ul.appendChild(e)}
+    var note=null;
+    if(rows.length>200)note='Zobrazeno 200 z '+rows.length+'. Zpřesni hledání.';
+    else if(!rows.length)note=places.length?'Nic nenalezeno.':'Zatím žádná místa. Nahraj .gpx nebo přidej místo.';
+    if(note){var e=document.createElement('li');e.textContent=note;e.style.cursor='default';ul.appendChild(e)}
   }
-
-  function setPlaces(arr,fit){
-    places=arr;
-    var lim=$('limit');lim.max=arr.length;lim.value=arr.length;
-    $('total').textContent=arr.length;
+  function refresh(opt){
+    opt=opt||{};
+    var lim=$('limit'),full=opt.full||parseInt(lim.value,10)>=parseInt(lim.max,10);
+    lim.max=places.length;
+    lim.value=full?places.length:Math.min(parseInt(lim.value,10)||0,places.length);
+    $('total').textContent=places.length;
     draw();renderList();
-    if(fit&&arr.length){map.fitBounds(L.latLngBounds(arr.map(function(p){return [p.lat,p.lon]})),{padding:[30,30]})}
+    if(!opt.skipSave)save();
+    if(opt.fit&&places.length)map.fitBounds(L.latLngBounds(places.map(function(p){return [p.lat,p.lon]})),{padding:[30,30]});
   }
 
+  /* ---------- Import GPX ---------- */
   function handleFile(f){
     if(!f)return;
     var r=new FileReader();
@@ -169,15 +221,82 @@ main{position:relative;min-height:0}
       try{
         var arr=parseGPX(r.result);
         if(!arr.length){msg('V souboru nejsou žádná místa (wpt).');return}
-        setPlaces(arr,true);
-        store('mapy_gpx',r.result);
-        msg('Načteno '+arr.length+' míst.');
+        if(places.length&&!confirm('V aplikaci už je '+places.length+' míst.\n\nOK = nahradit je novým souborem\nZrušit = přidat nová místa ke stávajícím (duplicity se přeskočí)')){
+          var seen={};places.forEach(function(p){seen[key(p)]=1});
+          var id=nextId(),added=0;
+          arr.forEach(function(p){if(!seen[key(p)]){p.id=id++;places.push(p);added++}});
+          refresh({full:true,fit:true});msg('Přidáno '+added+' nových míst.');
+        }else{
+          places=arr;refresh({full:true,fit:true});msg('Načteno '+arr.length+' míst.');
+        }
       }catch(e){msg(e.message)}
     };
     r.readAsText(f);
   }
+  function key(p){return p.lat.toFixed(6)+'|'+p.lon.toFixed(6)+'|'+p.name}
 
-  $('file').onchange=function(e){handleFile(e.target.files[0])};
+  /* ---------- Nové místo ---------- */
+  function parseCoords(s){
+    var t=s.trim();if(t.indexOf(';')>-1)t=t.replace(/,/g,'.');
+    var re=/(-?\d+(?:\.\d+)?)\s*°?\s*([NSEWnsew])?/g,m,v=[];
+    while((m=re.exec(t))&&v.length<2){
+      var x=parseFloat(m[1]);if(m[2]&&/[SsWw]/.test(m[2]))x=-Math.abs(x);v.push(x);
+    }
+    if(v.length<2||Math.abs(v[0])>90||Math.abs(v[1])>180)return null;
+    return {lat:v[0],lon:v[1]};
+  }
+  function addPlace(name,lat,lon){
+    var p=mk(nextId(),lat,lon,name||'Nové místo','',new Date().toISOString());
+    places.push(p);refresh({full:true});
+    L.popup().setLatLng([lat,lon]).setContent(popupEl(p)).openOn(map);
+    msg('Místo přidáno a uloženo.');
+  }
+  $('add').onclick=function(){
+    var c=parseCoords($('ncoord').value);
+    if(!c){msg('Souřadnice nejsem schopen přečíst. Zadej např. 50.0755, 14.4378');return}
+    addPlace($('nname').value.trim(),c.lat,c.lon);
+    $('nname').value='';$('ncoord').value='';map.flyTo([c.lat,c.lon],Math.max(map.getZoom(),12));
+  };
+  map.on('contextmenu',function(e){
+    var name=prompt('Název nového místa:','Nové místo');
+    if(name===null)return;
+    addPlace(name.trim(),e.latlng.lat,e.latlng.lng);
+  });
+
+  /* ---------- Export ---------- */
+  function download(name,mime,text){
+    var a=document.createElement('a'),url=URL.createObjectURL(new Blob([text],{type:mime}));
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url)},1000);
+  }
+  function stamp(){return new Date().toISOString().slice(0,10)}
+  function need(){if(!places.length){msg('Není co exportovat.');return false}return true}
+  function xml(s){return String(s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+  $('xgpx').onclick=function(){
+    if(!need())return;
+    var o='<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Moje místa" xmlns="http://www.topografix.com/GPX/1/1">\n';
+    places.forEach(function(p){
+      o+='  <wpt lat="'+p.lat+'" lon="'+p.lon+'">\n    <name>'+xml(p.name)+'</name>\n'+(p.desc?'    <desc>'+xml(p.desc)+'</desc>\n':'')+(p.time?'    <time>'+xml(p.time)+'</time>\n':'')+'  </wpt>\n';
+    });
+    download('moje-mista-'+stamp()+'.gpx','application/gpx+xml',o+'</gpx>\n');
+  };
+  $('xcsv').onclick=function(){
+    if(!need())return;
+    var q=function(s){return '"'+String(s).replace(/"/g,'""')+'"'};
+    var o='\uFEFFname,description,latitude,longitude,time\r\n';
+    places.forEach(function(p){o+=[q(p.name),q(p.desc),p.lat,p.lon,q(p.time)].join(',')+'\r\n'});
+    download('moje-mista-'+stamp()+'.csv','text/csv;charset=utf-8',o);
+  };
+  $('xjson').onclick=function(){
+    if(!need())return;
+    var gj={type:'FeatureCollection',features:places.map(function(p){
+      return {type:'Feature',geometry:{type:'Point',coordinates:[p.lon,p.lat]},properties:{name:p.name,description:p.desc,time:p.time}};
+    })};
+    download('moje-mista-'+stamp()+'.geojson','application/geo+json',JSON.stringify(gj,null,2));
+  };
+
+  /* ---------- Události a start ---------- */
+  $('file').onchange=function(e){handleFile(e.target.files[0]);e.target.value=''};
   var dz=$('drop');
   ['dragover','dragenter'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('over')})});
   ['dragleave','drop'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('over')})});
@@ -185,15 +304,17 @@ main{position:relative;min-height:0}
   $('limit').oninput=draw;
   $('order').onchange=draw;
   $('q').oninput=renderList;
+  $('key').oninput=function(){store('mapy_key',$('key').value.trim())};
   $('key').onchange=setTiles;
   $('set').onchange=setTiles;
 
   var k=load('mapy_key'),s=load('mapy_set');
-  if(k)$('key').value=k;
+  if(k){$('key').value=k}
   if(s)$('set').value=s;
   setTiles();
-  var saved=load('mapy_gpx');
-  if(saved){try{setPlaces(parseGPX(saved),true)}catch(e){renderList()}}else renderList();
+  places=loadSaved();
+  refresh({full:true,fit:true,skipSave:!places.length});
+  if(places.length)$('saveinfo').textContent='Načteno z prohlížeče: '+places.length+' míst.';
 })();
 </script>
 </body>
