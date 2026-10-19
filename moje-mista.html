@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moje místa</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--bg:#f3f5f1;--panel:#fff;--ink:#1d2a22;--mute:#66736b;--line:#dbe1da;--accent:#c2410c;--accent-ink:#fff;--dot:#c2410c}
+@media(prefers-color-scheme:dark){:root{--bg:#141a16;--panel:#1c241f;--ink:#e6ece7;--mute:#8d9a92;--line:#2c372f;--accent:#f07a45;--accent-ink:#1a1006;--dot:#f07a45}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.45 "Segoe UI",system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);display:grid;grid-template-columns:340px 1fr}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.box{padding:14px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0 0 2px}
+.sub{color:var(--mute);font-size:13px;margin:0}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+input[type=text],input[type=password],input[type=search],select{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=range]{width:100%;accent-color:var(--accent)}
+button,.btn{display:inline-block;padding:8px 12px;border:0;border-radius:6px;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:14px;text-align:center;color:var(--mute);margin-top:10px}
+.drop.over{border-color:var(--accent)}
+.row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.row b{font-size:15px}
+#list{list-style:none;margin:0;padding:0;overflow:auto;flex:1}
+#list li{padding:9px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+#list li:hover{background:var(--bg)}
+#list small{display:block;color:var(--mute)}
+#more{padding:10px 16px;color:var(--mute);font-size:13px}
+main{position:relative;min-height:0}
+#map{position:absolute;inset:0}
+.mapy-logo{position:absolute;left:8px;bottom:8px;z-index:1000}
+.mapy-logo img{display:block;height:20px}
+#msg{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:1000;background:var(--panel);color:var(--ink);border:1px solid var(--line);padding:8px 14px;border-radius:8px;display:none}
+@media(max-width:760px){body{grid-template-columns:1fr;grid-template-rows:46vh 1fr}aside{order:2;border-right:0;border-top:1px solid var(--line)}main{order:1}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="box">
+    <h1>Moje místa</h1>
+    <p class="sub">Záloha uložených míst z mapy.com</p>
+    <label for="key">API klíč (developer.mapy.com)</label>
+    <input id="key" type="password" autocomplete="off" placeholder="vlož klíč">
+    <label for="set">Typ mapy</label>
+    <select id="set">
+      <option value="basic">Základní</option>
+      <option value="outdoor">Turistická</option>
+      <option value="aerial">Letecká</option>
+      <option value="winter">Zimní</option>
+    </select>
+    <div class="drop" id="drop">
+      Přetáhni sem .gpx soubor<br>nebo
+      <label class="btn" style="display:inline-block;margin:6px 0 0;color:var(--accent-ink)">Vybrat soubor<input id="file" type="file" accept=".gpx,application/gpx+xml,text/xml" hidden></label>
+    </div>
+  </div>
+  <div class="box">
+    <div class="row"><span>Míst na mapě</span><b><span id="shown">0</span> / <span id="total">0</span></b></div>
+    <input id="limit" type="range" min="0" max="0" value="0" aria-label="Počet vykreslených míst">
+    <label for="order">Které místa vykreslit</label>
+    <select id="order">
+      <option value="even">Rovnoměrně rozložená</option>
+      <option value="new">Nejnovější</option>
+      <option value="old">Nejstarší</option>
+    </select>
+    <label for="q">Hledat v seznamu</label>
+    <input id="q" type="search" placeholder="název nebo popis">
+  </div>
+  <ul id="list"></ul>
+</aside>
+<main>
+  <div id="map"></div>
+  <div id="msg"></div>
+  <a class="mapy-logo" href="http://mapy.com/" target="_blank" rel="noopener"><img src="https://api.mapy.cz/img/api/logo.svg" alt="Mapy.com"></a>
+</main>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var places=[], tiles=null, shownIds=new Set();
+  var map=L.map('map',{preferCanvas:true,zoomControl:true}).setView([49.8,15.5],7);
+  var canvas=L.canvas({padding:0.5});
+  var layer=L.layerGroup().addTo(map);
+  map.attribution && map.attributionControl.addAttribution('&copy; Seznam.cz a.s. a další');
+
+  function store(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function msg(t){var m=$('msg');m.textContent=t;m.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(function(){m.style.display='none'},3500)}
+
+  function setTiles(){
+    var key=$('key').value.trim();
+    if(tiles){map.removeLayer(tiles);tiles=null}
+    if(!key){msg('Vlož API klíč, jinak se mapa nenačte.');return}
+    tiles=L.tileLayer('https://api.mapy.cz/v1/maptiles/'+$('set').value+'/256/{z}/{x}/{y}?apikey='+encodeURIComponent(key),{minZoom:0,maxZoom:19,attribution:''});
+    tiles.addTo(map);tiles.bringToBack();
+    store('mapy_key',key);store('mapy_set',$('set').value);
+  }
+
+  function parseGPX(text){
+    var doc=new DOMParser().parseFromString(text,'application/xml');
+    if(doc.querySelector('parsererror')) throw new Error('Soubor není platné GPX.');
+    var out=[],w=doc.getElementsByTagName('wpt');
+    for(var i=0;i<w.length;i++){
+      var n=w[i],lat=parseFloat(n.getAttribute('lat')),lon=parseFloat(n.getAttribute('lon'));
+      if(isNaN(lat)||isNaN(lon))continue;
+      var g=function(t){var e=n.getElementsByTagName(t)[0];return e?e.textContent.trim():''};
+      var time=g('time');
+      out.push({id:i,lat:lat,lon:lon,name:g('name')||'(bez názvu)',desc:g('desc')||g('cmt'),time:time,ts:time?Date.parse(time)||0:0});
+    }
+    return out;
+  }
+
+  function pick(n){
+    var o=$('order').value,arr=places.slice();
+    if(o==='new')return arr.sort(function(a,b){return b.ts-a.ts||b.id-a.id}).slice(0,n);
+    if(o==='old')return arr.sort(function(a,b){return a.ts-b.ts||a.id-b.id}).slice(0,n);
+    if(n>=arr.length)return arr;
+    var step=arr.length/n,res=[];
+    for(var i=0;i<n;i++)res.push(arr[Math.floor(i*step)]);
+    return res;
+  }
+
+  function popupHtml(p){
+    var d=p.time?new Date(p.time).toLocaleDateString('cs-CZ'):'';
+    return '<b>'+esc(p.name)+'</b>'+(d?'<br>'+esc(d):'')+(p.desc?'<br>'+esc(p.desc):'')+'<br><small>'+p.lat.toFixed(5)+', '+p.lon.toFixed(5)+'</small>';
+  }
+
+  function draw(){
+    layer.clearLayers();
+    var n=parseInt($('limit').value,10)||0,sel=pick(n);
+    var css=getComputedStyle(document.documentElement).getPropertyValue('--dot').trim()||'#c2410c';
+    sel.forEach(function(p){
+      L.circleMarker([p.lat,p.lon],{renderer:canvas,radius:5,color:'#fff',weight:1,fillColor:css,fillOpacity:.9})
+        .bindPopup(function(){return popupHtml(p)}).addTo(layer);
+    });
+    $('shown').textContent=sel.length;
+  }
+
+  function renderList(){
+    var q=$('q').value.trim().toLowerCase(),ul=$('list');ul.innerHTML='';
+    var rows=places.filter(function(p){return !q||(p.name+' '+p.desc).toLowerCase().indexOf(q)>-1});
+    rows.sort(function(a,b){return b.ts-a.ts||b.id-a.id});
+    rows.slice(0,200).forEach(function(p){
+      var li=document.createElement('li');
+      li.innerHTML=esc(p.name)+'<small>'+(p.time?new Date(p.time).toLocaleDateString('cs-CZ'):'')+(p.desc?' '+esc(p.desc.slice(0,60)):'')+'</small>';
+      li.onclick=function(){map.flyTo([p.lat,p.lon],Math.max(map.getZoom(),14));L.popup().setLatLng([p.lat,p.lon]).setContent(popupHtml(p)).openOn(map)};
+      ul.appendChild(li);
+    });
+    if(rows.length>200){var m=document.createElement('li');m.id='more';m.textContent='Zobrazeno 200 z '+rows.length+'. Zpřesni hledání.';m.style.cursor='default';ul.appendChild(m)}
+    if(!rows.length){var e=document.createElement('li');e.textContent=places.length?'Nic nenalezeno.':'Zatím žádná místa. Nahraj .gpx soubor.';e.style.cursor='default';ul.appendChild(e)}
+  }
+
+  function setPlaces(arr,fit){
+    places=arr;
+    var lim=$('limit');lim.max=arr.length;lim.value=arr.length;
+    $('total').textContent=arr.length;
+    draw();renderList();
+    if(fit&&arr.length){map.fitBounds(L.latLngBounds(arr.map(function(p){return [p.lat,p.lon]})),{padding:[30,30]})}
+  }
+
+  function handleFile(f){
+    if(!f)return;
+    var r=new FileReader();
+    r.onload=function(){
+      try{
+        var arr=parseGPX(r.result);
+        if(!arr.length){msg('V souboru nejsou žádná místa (wpt).');return}
+        setPlaces(arr,true);
+        store('mapy_gpx',r.result);
+        msg('Načteno '+arr.length+' míst.');
+      }catch(e){msg(e.message)}
+    };
+    r.readAsText(f);
+  }
+
+  $('file').onchange=function(e){handleFile(e.target.files[0])};
+  var dz=$('drop');
+  ['dragover','dragenter'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.add('over')})});
+  ['dragleave','drop'].forEach(function(ev){dz.addEventListener(ev,function(e){e.preventDefault();dz.classList.remove('over')})});
+  dz.addEventListener('drop',function(e){handleFile(e.dataTransfer.files[0])});
+  $('limit').oninput=draw;
+  $('order').onchange=draw;
+  $('q').oninput=renderList;
+  $('key').onchange=setTiles;
+  $('set').onchange=setTiles;
+
+  var k=load('mapy_key'),s=load('mapy_set');
+  if(k)$('key').value=k;
+  if(s)$('set').value=s;
+  setTiles();
+  var saved=load('mapy_gpx');
+  if(saved){try{setPlaces(parseGPX(saved),true)}catch(e){renderList()}}else renderList();
+})();
+</script>
+</body>
+</html>
